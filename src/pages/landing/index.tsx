@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
-import { PaymentMethod, StripeError } from '@stripe/stripe-js';
+import { PaymentIntent, PaymentMethod, StripeError } from '@stripe/stripe-js';
+import axios from 'axios';
 
 const LandingPage = () => {
   const [stripeError, setStripeError] = useState<StripeError>();
   const [stripePaymentMethod, setStripePaymentMethod] = useState<PaymentMethod>();
+  const [stripePaymentIntent, setStripePaymentIntent] = useState<PaymentIntent>();
   const stripe = useStripe();
   const elements = useElements();
 
@@ -23,21 +25,48 @@ const LandingPage = () => {
     // each type of element.
     const cardElement = elements.getElement(CardElement);
 
-    if (cardElement) {
-      // Use your card Element with other Stripe.js APIs
+    if (!cardElement) return;
+
+    try {
+      //? get client-secret
+      const {
+        data: { clientSecret },
+      } = await axios.post('https://d0tzcztg1f.execute-api.us-east-1.amazonaws.com/dev/stripe', {
+        eventId: 3,
+        userId: '61c5923d-dd7b-44a8-a76d-bf6d32ad71c9',
+      });
+
+      //? Use your card Element with other Stripe.js APIs
       const { error, paymentMethod } = await stripe.createPaymentMethod({
         type: 'card',
         card: cardElement,
+        billing_details: {
+          name: 'Ariful Alam',
+          email: 'alamariful1727@gmail.com',
+        },
       });
 
       if (error) {
-        console.log('[error]', error);
+        console.log('[paymentMethod-error]', error);
         setStripeError(error);
-      } else {
-        console.log('[PaymentMethod]', paymentMethod);
-        setStripeError(undefined);
-        setStripePaymentMethod(paymentMethod);
+        return;
       }
+
+      // ? confirm payment
+      if (paymentMethod) {
+        setStripePaymentMethod(paymentMethod);
+        const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+          payment_method: paymentMethod.id,
+        });
+        if (error) {
+          console.log('[confirmCardPayment-error]', error);
+          setStripeError(error);
+          return;
+        }
+        setStripePaymentIntent(paymentIntent);
+      }
+    } catch (error) {
+      console.log('error', error);
     }
   };
 
@@ -82,7 +111,18 @@ const LandingPage = () => {
       </div>
       <div>
         {stripeError && <pre>{JSON.stringify(stripeError, null, 2)}</pre>}
-        {stripePaymentMethod && <pre>{JSON.stringify(stripePaymentMethod, null, 2)}</pre>}
+        {stripePaymentMethod && (
+          <div>
+            <h1>stripePaymentMethod</h1>
+            <pre>{JSON.stringify(stripePaymentMethod, null, 2)}</pre>
+          </div>
+        )}
+        {stripePaymentIntent && (
+          <div>
+            <h1>stripePaymentIntent</h1>
+            <pre>{JSON.stringify(stripePaymentIntent, null, 2)}</pre>
+          </div>
+        )}
       </div>
     </div>
   );
